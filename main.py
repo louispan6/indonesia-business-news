@@ -29,11 +29,15 @@ SYSTEM_PROMPT = """
 - 坚决过滤：本地社会治安事件、政党口水战、娱乐八卦、无实质数据的企业公关稿。
 
 # 翻译与输出规范（迎合中国商人阅读习惯）
-1. 标题重构：必须前置“核心数据”或“关键动作”，让人一眼看透利好还是利空。
-2. 结构化输出：每条新闻严格按以下三段式输出：
-   - 标题：[提炼后的硬核标题，加适当 Emoji]
-   - 商业资讯：[80-100字极度精炼概括新闻核心事实，保留重要数据]
-   - 出海洞察：[一句话点透这条新闻对中国商人的直接影响，如合规成本、清关风险、投资机会等]
+1. 严禁输出任何寒暄、解释、确认语或元叙述，例如“好的，老板”“已为您筛选”“以下是”等。
+2. 第一行必须直接输出 Markdown 二级标题：## 今日印尼市场情报简报（YYYY年M月D日）
+3. 每条新闻必须配一张图片：如果候选新闻提供 Image URL，必须在标题下方输出 `![图片说明](Image URL)`。
+4. 标题重构：必须前置“核心数据”或“关键动作”，让人一眼看透利好还是利空。
+5. 结构化输出：每条新闻严格按以下三段式输出：
+   - `### [序号]. [提炼后的硬核标题，加适当 Emoji]`
+   - `**商业资讯：** [80-100字极度精炼概括新闻核心事实，保留重要数据]`
+   - `**出海洞察：** [一句话点透这条新闻对中国商人的直接影响，如合规成本、清关风险、投资机会等]`
+6. 不要使用项目符号列表；每条新闻之间空一行。
 """
 
 
@@ -75,6 +79,41 @@ def clean_html(raw_text: str | None) -> str:
     text = extractor.get_text()
     text = re.sub(r"\s+", " ", text).strip()
     return text
+
+
+def extract_image_url(entry: Any) -> str:
+    """Extract a representative image URL from common RSS fields."""
+    for field in ("media_content", "media_thumbnail"):
+        media_items = entry.get(field) or []
+        for media_item in media_items:
+            image_url = (media_item.get("url") or "").strip()
+            if image_url:
+                return image_url
+
+    for enclosure in entry.get("enclosures") or []:
+        image_url = (enclosure.get("href") or enclosure.get("url") or "").strip()
+        media_type = (enclosure.get("type") or "").lower()
+        if image_url and (not media_type or media_type.startswith("image/")):
+            return image_url
+
+    for link_item in entry.get("links") or []:
+        image_url = (link_item.get("href") or "").strip()
+        media_type = (link_item.get("type") or "").lower()
+        rel = (link_item.get("rel") or "").lower()
+        if image_url and (media_type.startswith("image/") or rel == "enclosure"):
+            return image_url
+
+    raw_summary = (
+        entry.get("summary")
+        or entry.get("description")
+        or entry.get("subtitle")
+        or ""
+    )
+    image_match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', raw_summary, re.I)
+    if image_match:
+        return html.unescape(image_match.group(1)).strip()
+
+    return ""
 
 
 def parse_entry_datetime(entry: Any, fallback_tz: ZoneInfo) -> datetime:
@@ -124,6 +163,7 @@ def fetch_feed(source_name: str, rss_url: str, timeout: int = 20) -> list[dict[s
             or entry.get("subtitle")
             or ""
         )
+        image_url = extract_image_url(entry)
 
         if not title or not link:
             continue
@@ -134,6 +174,7 @@ def fetch_feed(source_name: str, rss_url: str, timeout: int = 20) -> list[dict[s
                 "title": title,
                 "link": link,
                 "summary": summary,
+                "image_url": image_url,
                 "published_at": published_at.isoformat(timespec="seconds"),
                 "published_date": published_at.date().isoformat(),
             }
@@ -188,6 +229,7 @@ def fetch_indonesia_news(max_items: int = 20, min_items: int = 15) -> list[dict[
             "title": item["title"],
             "link": item["link"],
             "summary": item["summary"],
+            "image_url": item["image_url"],
             "published_at": item["published_at"],
         }
         for item in selected
@@ -207,10 +249,25 @@ def format_news_for_ai(news_data: list[dict[str, str]]) -> str:
                     f"Title：{item['title']}",
                     f"Link：{item['link']}",
                     f"Summary：{item['summary'] or '无摘要'}",
+                    f"Image URL：{item.get('image_url') or '无'}",
                 ]
             )
         )
     return "\n".join(lines)
+
+
+def clean_ai_content(content: str) -> str:
+    """Remove model preambles before the first actual Markdown heading."""
+    stripped = content.strip()
+    heading_match = re.search(r"(?m)^(#{1,3}\s+.+)$", stripped)
+    if heading_match:
+        return stripped[heading_match.start():].strip()
+
+    numbered_match = re.search(r"(?m)^\s*1[.、]\s+", stripped)
+    if numbered_match:
+        return stripped[numbered_match.start():].strip()
+
+    return stripped
 
 
 def process_news_with_ai(news_data: list[dict[str, str]]) -> str:
@@ -251,7 +308,7 @@ def process_news_with_ai(news_data: list[dict[str, str]]) -> str:
     if not content:
         raise RuntimeError("AI 返回内容为空。")
 
-    return content.strip()
+    return clean_ai_content(content)
 
 
 def save_to_markdown(content: str) -> Path:
@@ -301,6 +358,7 @@ def save_raw_news_to_markdown(news_data: list[dict[str, str]]) -> Path:
                 f"- 发布时间：{item['published_at']}",
                 f"- 链接：{item['link']}",
                 f"- 摘要：{item['summary'] or '无摘要'}",
+                f"- 图片：{item.get('image_url') or '无'}",
                 "",
             ]
         )
