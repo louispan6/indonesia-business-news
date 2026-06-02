@@ -5,8 +5,7 @@ timezone: Asia/Jakarta
 theme: minima
 show_excerpts: true
 
-author:
-  name: OpenClaw
+author: Pimi’s Economic Watch
 
 header_pages:
   - about.md
