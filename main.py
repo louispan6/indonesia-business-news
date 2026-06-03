@@ -315,10 +315,11 @@ def save_to_markdown(content: str) -> Path:
     posts_dir = Path("_posts")
     posts_dir.mkdir(parents=True, exist_ok=True)
 
-    jakarta_now = datetime.now(ZoneInfo("Asia/Jakarta"))
-    post_date = jakarta_now.strftime("%Y-%m-%d")
-    post_title = f"印尼商业风向标：{post_date} 今日简报"
-    filename = f"{post_date}-indonesia-business-brief.md"
+    beijing_now = datetime.now(ZoneInfo("Asia/Shanghai"))
+    post_date = beijing_now.strftime("%Y-%m-%d")
+    generated_at = beijing_now.strftime("%Y-%m-%d %H:%M")
+    post_title = f"今日印尼市场情报简报 (生成于 {generated_at})"
+    filename = f"{post_date}-indonesia-news.md"
     output_path = posts_dir / filename
 
     front_matter = "\n".join(
@@ -326,7 +327,7 @@ def save_to_markdown(content: str) -> Path:
             "---",
             "layout: post",
             f'title: "{post_title}"',
-            f"date: {jakarta_now.strftime('%Y-%m-%d %H:%M:%S %z')}",
+            f"date: {beijing_now.strftime('%Y-%m-%d %H:%M:%S %z')}",
             "categories: [indonesia, business, news]",
             "tags: [印尼, 商业情报, 宏观经济, 出海]",
             "---",
@@ -340,11 +341,11 @@ def save_to_markdown(content: str) -> Path:
 def save_raw_news_to_markdown(news_data: list[dict[str, str]]) -> Path:
     output_dir = Path("outputs")
     output_dir.mkdir(parents=True, exist_ok=True)
-    jakarta_today = datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%Y%m%d")
-    output_path = output_dir / f"OpenClaw_ID_News_Raw_{jakarta_today}.md"
+    beijing_today = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m%d")
+    output_path = output_dir / f"OpenClaw_ID_News_Raw_{beijing_today}.md"
 
     lines = [
-        f"# OpenClaw 印尼候选新闻原始列表 - {jakarta_today}",
+        f"# OpenClaw 印尼候选新闻原始列表 - {beijing_today}",
         "",
         "AI 处理失败时自动保存。可在 DeepSeek 余额恢复后重新运行完整流程。",
         "",

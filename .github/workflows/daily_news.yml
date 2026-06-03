@@ -2,7 +2,7 @@ name: Daily Indonesia Business News
 
 on:
   schedule:
-    # Beijing 10:00 = UTC 02:00
+    # GitHub Actions cron uses UTC. Beijing 10:00 (UTC+8) = UTC 02:00.
     - cron: "0 2 * * *"
   workflow_dispatch:
 
@@ -44,7 +44,8 @@ jobs:
 
           if git diff --cached --quiet; then
             echo "No new post to commit."
+            exit 0
           else
-            git commit -m "chore: publish daily Indonesia business brief $(date -u +'%Y-%m-%d')"
+            git commit -m "chore: publish daily Indonesia business brief $(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M')"
             git push
           fi
