@@ -4,18 +4,31 @@ on:
   schedule:
     # GitHub Actions cron uses UTC. Beijing 07:47 (UTC+8) = previous day UTC 23:47.
     - cron: "47 23 * * *"
+    # Backup run: Beijing 08:17. It skips automatically if today's post already exists.
+    - cron: "17 0 * * *"
   workflow_dispatch:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
   generate-news:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -28,7 +41,21 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Check whether today's scheduled post already exists
+        id: today-post
+        run: |
+          today="$(TZ='Asia/Shanghai' date +'%Y-%m-%d')"
+          echo "today=$today" >> "$GITHUB_OUTPUT"
+
+          if [ "${{ github.event_name }}" = "schedule" ] && ls _posts/${today}-indonesia-news-*.md >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Today's post already exists. Scheduled backup run will skip generation."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Generate daily brief
+        if: steps.today-post.outputs.exists != 'true'
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           DEEPSEEK_BASE_URL: https://api.deepseek.com
@@ -36,6 +63,7 @@ jobs:
         run: python main.py
 
       - name: Commit and push generated post
+        if: steps.today-post.outputs.exists != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -47,5 +75,22 @@ jobs:
             exit 0
           else
             git commit -m "chore: publish daily Indonesia business brief $(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M')"
+            git pull --rebase origin main
             git push
           fi
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Build site with Jekyll
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./
+          destination: ./_site
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
