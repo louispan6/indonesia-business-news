@@ -317,9 +317,9 @@ def save_to_markdown(content: str) -> Path:
 
     beijing_now = datetime.now(ZoneInfo("Asia/Shanghai"))
     post_date = beijing_now.strftime("%Y-%m-%d")
-    generated_at = beijing_now.strftime("%Y-%m-%d %H:%M")
-    post_title = f"今日印尼市场情报简报 (生成于 {generated_at})"
-    filename = f"{post_date}-indonesia-news.md"
+    post_time = beijing_now.strftime("%H%M%S")
+    post_title = f"印尼商业风向标：{post_date} 今日简报"
+    filename = f"{post_date}-indonesia-news-{post_time}.md"
     output_path = posts_dir / filename
 
     front_matter = "\n".join(

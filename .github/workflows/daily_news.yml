@@ -2,8 +2,8 @@ name: Daily Indonesia Business News
 
 on:
   schedule:
-    # GitHub Actions cron uses UTC. Beijing 10:00 (UTC+8) = UTC 02:00.
-    - cron: "0 2 * * *"
+    # GitHub Actions cron uses UTC. Beijing 07:47 (UTC+8) = previous day UTC 23:47.
+    - cron: "47 23 * * *"
   workflow_dispatch:
 
 permissions:
