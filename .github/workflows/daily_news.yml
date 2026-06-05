@@ -4,8 +4,8 @@ on:
   schedule:
     # GitHub Actions cron uses UTC. Beijing 07:47 (UTC+8) = previous day UTC 23:47.
     - cron: "47 23 * * *"
-    # Backup run: Beijing 08:17. It skips automatically if today's post already exists.
-    - cron: "17 0 * * *"
+    # GitHub Actions cron uses UTC. Beijing 17:45 (UTC+8) = UTC 09:45.
+    - cron: "45 9 * * *"
   workflow_dispatch:
 
 permissions:
@@ -45,11 +45,19 @@ jobs:
         id: today-post
         run: |
           today="$(TZ='Asia/Shanghai' date +'%Y-%m-%d')"
-          echo "today=$today" >> "$GITHUB_OUTPUT"
+          hour="$(TZ='Asia/Shanghai' date +'%H')"
+          if [ "$hour" -lt 14 ]; then
+            report_prefix="morning"
+          else
+            report_prefix="evening"
+          fi
 
-          if [ "${{ github.event_name }}" = "schedule" ] && ls _posts/${today}-indonesia-news-*.md >/dev/null 2>&1; then
+          echo "today=$today" >> "$GITHUB_OUTPUT"
+          echo "report_prefix=$report_prefix" >> "$GITHUB_OUTPUT"
+
+          if [ "${{ github.event_name }}" = "schedule" ] && ls _posts/${today}-${report_prefix}-indonesia-news-*.md >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Today's post already exists. Scheduled backup run will skip generation."
+            echo "Today's ${report_prefix} post already exists. Scheduled run will skip generation."
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi

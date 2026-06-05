@@ -15,20 +15,8 @@ from dotenv import load_dotenv
 from openai import APIStatusError, OpenAI
 
 
-SYSTEM_PROMPT = """
-# 角色设定
-你是一位常驻雅加达的资深商业分析师，专门为中国出海企业家、跨境电商卖家和外贸从业者提供高价值的印尼市场情报。
-
-# 任务目标
-我将提供一批今日印尼新闻的原始标题和摘要（印尼语或英语）。你的任务是：
-1. 【毒辣筛选】从繁杂的资讯中，挑选出最具商业变现价值、宏观指导意义的 3-5 条核心新闻。
-2. 【重构翻译】将选出的新闻转化为符合中国顶尖财经媒体排版习惯的中文简报。
-
-# 筛选标准（核心护城河）
-- 必须优先选择：政策法规变动、宏观经济指标、重点行业动向（如新能源、电商新规、基建）。
-- 坚决过滤：本地社会治安事件、政党口水战、娱乐八卦、无实质数据的企业公关稿。
-
-# 翻译与输出规范（迎合中国商人阅读习惯）
+OUTPUT_RULES = """
+# 输出规范（死守中国出海企业视角）
 1. 严禁输出任何寒暄、解释、确认语或元叙述，例如“好的，老板”“已为您筛选”“以下是”等。
 2. 第一行必须直接输出 Markdown 二级标题：## 今日印尼市场情报简报（YYYY年M月D日）
 3. 每条新闻必须配一张图片：如果候选新闻提供 Image URL，必须在标题下方输出 `![图片说明](Image URL)`。
@@ -41,7 +29,59 @@ SYSTEM_PROMPT = """
 """
 
 
-RSS_SOURCES = [
+MORNING_SYSTEM_PROMPT = f"""
+# 角色设定
+你是一位常驻雅加达的政商分析师，专门为中国出海企业家、跨境电商卖家和外贸从业者提供高价值的印尼政治与政策风险情报。
+
+# 任务目标
+我将提供一批今日印尼新闻的原始标题和摘要（印尼语或英语）。你的任务是：
+1. 【毒辣筛选】从繁杂资讯中挑选最值得中国出海企业关注的 3-5 条核心新闻。
+2. 【重构翻译】将选出的新闻转化为符合中国顶尖财经媒体排版习惯的中文简报。
+
+# 早间政经内参筛选标准
+- 重点筛选：印尼国内重大政治突发事件（如内阁部长被抓/贪腐案）、核心政策出台、外交变动、司法监管、政府采购和外资审批相关事件。
+- 必须深度剖析这些【政治与政策震荡】对中国出海企业的直接影响，例如工作签证审查、外资资产安全、合规审查、政府招标跟进、园区审批、税务稽查和本地合作伙伴风险。
+- 坚决过滤：单纯刑事案件、娱乐八卦、政党口水战、没有政策或商业外溢影响的地方新闻。
+
+{OUTPUT_RULES}
+"""
+
+
+EVENING_SYSTEM_PROMPT = f"""
+# 角色设定
+你是一位常驻雅加达的宏观经济分析师，专门为中国出海企业家、跨境电商卖家和外贸从业者提供高价值的印尼市场与产业情报。
+
+# 任务目标
+我将提供一批今日印尼新闻的原始标题和摘要（印尼语或英语）。你的任务是：
+1. 【毒辣筛选】从繁杂资讯中挑选最值得中国出海企业关注的 3-5 条核心新闻。
+2. 【重构翻译】将选出的新闻转化为符合中国顶尖财经媒体排版习惯的中文简报。
+
+# 晚间市场观察筛选标准
+- 重点筛选：宏观经济数据（汇率、通胀、贸易、财政）、民生消费热点、重点产业动态（如新能源、电商、基建、制造业、物流、矿业和农业）。
+- 必须深度剖析这些【民生与经济数据】对中国出海企业的直接影响，例如国民消费力降级、特定赛道爆发、供应链成本涨跌、清关风险、渠道价格变化和投资窗口。
+- 坚决过滤：娱乐八卦、单纯社会治安事件、没有数据或产业含义的企业公关稿。
+
+{OUTPUT_RULES}
+"""
+
+
+MORNING_RSS_SOURCES = [
+    {
+        "source": "ANTARA Hukum",
+        "url": "https://www.antaranews.com/rss/hukum.xml",
+    },
+    {
+        "source": "ANTARA Politik",
+        "url": "https://www.antaranews.com/rss/politik.xml",
+    },
+    {
+        "source": "Tempo Nasional",
+        "url": "https://nasional.tempo.co/rss",
+    },
+]
+
+
+EVENING_RSS_SOURCES = [
     {
         "source": "CNBC Indonesia News",
         "url": "https://www.cnbcindonesia.com/news/rss",
@@ -55,6 +95,32 @@ RSS_SOURCES = [
         "url": "https://www.antaranews.com/rss/ekonomi-bisnis.xml",
     },
 ]
+
+
+def get_beijing_now() -> datetime:
+    return datetime.now(ZoneInfo("Asia/Shanghai"))
+
+
+def get_report_profile(now: datetime | None = None) -> dict[str, Any]:
+    beijing_now = now or get_beijing_now()
+    is_morning = beijing_now.hour < 14
+
+    if is_morning:
+        return {
+            "kind": "morning",
+            "label": "早间政经内参",
+            "filename_prefix": "morning",
+            "rss_sources": MORNING_RSS_SOURCES,
+            "system_prompt": MORNING_SYSTEM_PROMPT,
+        }
+
+    return {
+        "kind": "evening",
+        "label": "晚间市场观察",
+        "filename_prefix": "evening",
+        "rss_sources": EVENING_RSS_SOURCES,
+        "system_prompt": EVENING_SYSTEM_PROMPT,
+    }
 
 
 class _HTMLTextExtractor(HTMLParser):
@@ -184,13 +250,17 @@ def fetch_feed(source_name: str, rss_url: str, timeout: int = 20) -> list[dict[s
     return entries
 
 
-def fetch_indonesia_news(max_items: int = 20, min_items: int = 15) -> list[dict[str, str]]:
+def fetch_indonesia_news(
+    rss_sources: list[dict[str, str]],
+    max_items: int = 20,
+    min_items: int = 15,
+) -> list[dict[str, str]]:
     """Fetch today's latest Indonesia business news from configured RSS sources."""
     jakarta_tz = ZoneInfo("Asia/Jakarta")
     today = datetime.now(jakarta_tz).date()
     collected: list[dict[str, Any]] = []
 
-    for source in RSS_SOURCES:
+    for source in rss_sources:
         try:
             collected.extend(fetch_feed(source["source"], source["url"]))
         except requests.RequestException as exc:
@@ -270,7 +340,7 @@ def clean_ai_content(content: str) -> str:
     return stripped
 
 
-def process_news_with_ai(news_data: list[dict[str, str]]) -> str:
+def process_news_with_ai(news_data: list[dict[str, str]], system_prompt: str) -> str:
     if not news_data:
         raise ValueError("news_data 为空，无法交由 AI 分析。")
 
@@ -291,7 +361,7 @@ def process_news_with_ai(news_data: list[dict[str, str]]) -> str:
             model=model,
             temperature=0.3,
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": news_text},
             ],
         )
@@ -311,15 +381,18 @@ def process_news_with_ai(news_data: list[dict[str, str]]) -> str:
     return clean_ai_content(content)
 
 
-def save_to_markdown(content: str) -> Path:
+def save_to_markdown(content: str, report_profile: dict[str, Any]) -> Path:
     posts_dir = Path("_posts")
     posts_dir.mkdir(parents=True, exist_ok=True)
 
-    beijing_now = datetime.now(ZoneInfo("Asia/Shanghai"))
+    beijing_now = get_beijing_now()
     post_date = beijing_now.strftime("%Y-%m-%d")
     post_time = beijing_now.strftime("%H%M%S")
-    post_title = f"印尼商业风向标：{post_date} 今日简报"
-    filename = f"{post_date}-indonesia-news-{post_time}.md"
+    post_title = f"印尼商业风向标：{post_date} [{report_profile['label']}]"
+    filename = (
+        f"{post_date}-{report_profile['filename_prefix']}"
+        f"-indonesia-news-{post_time}.md"
+    )
     output_path = posts_dir / filename
 
     front_matter = "\n".join(
@@ -341,7 +414,7 @@ def save_to_markdown(content: str) -> Path:
 def save_raw_news_to_markdown(news_data: list[dict[str, str]]) -> Path:
     output_dir = Path("outputs")
     output_dir.mkdir(parents=True, exist_ok=True)
-    beijing_today = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m%d")
+    beijing_today = get_beijing_now().strftime("%Y%m%d")
     output_path = output_dir / f"OpenClaw_ID_News_Raw_{beijing_today}.md"
 
     lines = [
@@ -379,9 +452,12 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    report_profile = get_report_profile()
     print("====== OpenClaw 印尼商业新闻自动化脚本 ======")
-    print("🚀 正在抓取印尼商业新闻...")
-    news_data = fetch_indonesia_news()
+    print(f"🕒 当前北京时间：{get_beijing_now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"🧭 当前报告模式：{report_profile['label']}")
+    print("🚀 正在抓取印尼新闻源...")
+    news_data = fetch_indonesia_news(report_profile["rss_sources"])
     print(f"✅ 已整理 {len(news_data)} 条候选新闻。")
 
     if args.fetch_only:
@@ -392,14 +468,14 @@ def main() -> None:
         return
 
     try:
-        content = process_news_with_ai(news_data)
+        content = process_news_with_ai(news_data, report_profile["system_prompt"])
     except RuntimeError as exc:
         raw_output_path = save_raw_news_to_markdown(news_data)
         print(f"❌ AI 处理失败：{exc}")
         print(f"📝 已先保存候选新闻原始列表：{raw_output_path}")
         raise SystemExit(1) from exc
 
-    output_path = save_to_markdown(content)
+    output_path = save_to_markdown(content, report_profile)
     print(f"✅ 简报已生成：{output_path}")
 
 
