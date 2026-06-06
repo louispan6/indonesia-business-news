@@ -2,17 +2,19 @@ import argparse
 import html
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import feedparser
 import requests
 from dotenv import load_dotenv
 from openai import APIStatusError, OpenAI
+
+
+BEIJING_TZ = timezone(timedelta(hours=8), name="UTC+08:00")
 
 
 OUTPUT_RULES = """
@@ -31,17 +33,19 @@ OUTPUT_RULES = """
 
 MORNING_SYSTEM_PROMPT = f"""
 # 角色设定
-你是一位常驻雅加达的政商分析师，专门为中国出海企业家、跨境电商卖家和外贸从业者提供高价值的印尼政治与政策风险情报。
+你是一位常驻雅加达的政商安全顾问。你的唯一任务是预警政治与合规风险，专门为中国出海企业家、跨境电商卖家和外贸从业者识别印尼政法与监管冲击。
 
 # 任务目标
 我将提供一批今日印尼新闻的原始标题和摘要（印尼语或英语）。你的任务是：
-1. 【毒辣筛选】从繁杂资讯中挑选最值得中国出海企业关注的 3-5 条核心新闻。
-2. 【重构翻译】将选出的新闻转化为符合中国顶尖财经媒体排版习惯的中文简报。
+1. 【强制风险过滤】从繁杂资讯中挑选最值得中国出海企业警惕的 1-5 条核心风险新闻。
+2. 【重构翻译】将选出的新闻转化为符合中国顶尖财经媒体排版习惯的中文政经风险简报。
 
-# 早间政经内参筛选标准
-- 重点筛选：印尼国内重大政治突发事件（如内阁部长被抓/贪腐案）、核心政策出台、外交变动、司法监管、政府采购和外资审批相关事件。
-- 必须深度剖析这些【政治与政策震荡】对中国出海企业的直接影响，例如工作签证审查、外资资产安全、合规审查、政府招标跟进、园区审批、税务稽查和本地合作伙伴风险。
-- 坚决过滤：单纯刑事案件、娱乐八卦、政党口水战、没有政策或商业外溢影响的地方新闻。
+# 早间政经内参强制筛选规则
+- 你必须重点寻找包含以下机构或动作的新闻：移民局(Imigrasi)抓捕/遣返、反贪局(KPK)调查、海关(Bea Cukai)严查、部长级高官落马、针对外籍劳工(TKA)的新政。
+- 必须优先选择：政府突发监管、贪腐调查、官员落马、外籍劳工政策、海关稽查、签证/居留审查、政府招标风向、外资审批变化和对外企资产安全有影响的事件。
+- 每条新闻必须直接回答：这件事会如何影响中国出海企业的工作签证、外籍员工、海关清关、税务稽查、政府项目、资产安全、本地合作伙伴和合规成本。
+- 如果抓取到的新闻全是软性的会议通稿或政客口水战，请宁缺毋滥，仅挑选那些对中国出海企业有直接合规警告或资产安全影响的事件。
+- 坚决过滤：普通会议通稿、政客表态、无监管动作的口水战、单纯刑事案件、娱乐八卦、没有外溢商业风险的地方新闻。
 
 {OUTPUT_RULES}
 """
@@ -67,16 +71,16 @@ EVENING_SYSTEM_PROMPT = f"""
 
 MORNING_RSS_SOURCES = [
     {
+        "source": "Detik Hukum",
+        "url": "https://news.detik.com/hukum/rss",
+    },
+    {
+        "source": "Kompas Nasional",
+        "url": "https://nasional.kompas.com/rss",
+    },
+    {
         "source": "ANTARA Hukum",
         "url": "https://www.antaranews.com/rss/hukum.xml",
-    },
-    {
-        "source": "ANTARA Politik",
-        "url": "https://www.antaranews.com/rss/politik.xml",
-    },
-    {
-        "source": "Tempo Nasional",
-        "url": "https://nasional.tempo.co/rss",
     },
 ]
 
@@ -98,7 +102,7 @@ EVENING_RSS_SOURCES = [
 
 
 def get_beijing_now() -> datetime:
-    return datetime.now(ZoneInfo("Asia/Shanghai"))
+    return datetime.now(BEIJING_TZ)
 
 
 def get_report_profile(now: datetime | None = None) -> dict[str, Any]:
@@ -182,7 +186,7 @@ def extract_image_url(entry: Any) -> str:
     return ""
 
 
-def parse_entry_datetime(entry: Any, fallback_tz: ZoneInfo) -> datetime:
+def parse_entry_datetime(entry: Any, fallback_tz: timezone) -> datetime:
     """Parse common RSS datetime fields into timezone-aware datetime."""
     for field in ("published_parsed", "updated_parsed", "created_parsed"):
         parsed_value = entry.get(field)
@@ -217,10 +221,9 @@ def fetch_feed(source_name: str, rss_url: str, timeout: int = 20) -> list[dict[s
         print(f"⚠️  {source_name} RSS 解析存在警告，继续尝试读取可用条目。")
 
     entries: list[dict[str, Any]] = []
-    jakarta_tz = ZoneInfo("Asia/Jakarta")
 
     for entry in parsed_feed.entries:
-        published_at = parse_entry_datetime(entry, jakarta_tz)
+        published_at = parse_entry_datetime(entry, BEIJING_TZ)
         title = clean_html(entry.get("title", ""))
         link = entry.get("link", "").strip()
         summary = clean_html(
@@ -256,8 +259,7 @@ def fetch_indonesia_news(
     min_items: int = 15,
 ) -> list[dict[str, str]]:
     """Fetch today's latest Indonesia business news from configured RSS sources."""
-    jakarta_tz = ZoneInfo("Asia/Jakarta")
-    today = datetime.now(jakarta_tz).date()
+    today = get_beijing_now().date()
     collected: list[dict[str, Any]] = []
 
     for source in rss_sources:
