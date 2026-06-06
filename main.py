@@ -105,8 +105,18 @@ def get_beijing_now() -> datetime:
     return datetime.now(BEIJING_TZ)
 
 
-def get_report_profile(now: datetime | None = None) -> dict[str, Any]:
-    beijing_now = now or get_beijing_now()
+def get_run_context() -> dict[str, Any]:
+    beijing_now = get_beijing_now()
+    return {
+        "beijing_now": beijing_now,
+        "current_bj_date": beijing_now.strftime("%Y-%m-%d"),
+        "current_bj_datetime": beijing_now.strftime("%Y-%m-%d %H:%M:%S"),
+        "current_bj_time": beijing_now.strftime("%H%M%S"),
+    }
+
+
+def get_report_profile(run_context: dict[str, Any]) -> dict[str, Any]:
+    beijing_now = run_context["beijing_now"]
     is_morning = beijing_now.hour < 14
 
     if is_morning:
@@ -255,11 +265,11 @@ def fetch_feed(source_name: str, rss_url: str, timeout: int = 20) -> list[dict[s
 
 def fetch_indonesia_news(
     rss_sources: list[dict[str, str]],
+    current_bj_date: str,
     max_items: int = 20,
     min_items: int = 15,
 ) -> list[dict[str, str]]:
     """Fetch today's latest Indonesia business news from configured RSS sources."""
-    today = get_beijing_now().date()
     collected: list[dict[str, Any]] = []
 
     for source in rss_sources:
@@ -283,7 +293,7 @@ def fetch_indonesia_news(
 
     todays_items = [
         item for item in sorted_items
-        if datetime.fromisoformat(item["published_at"]).date() == today
+        if datetime.fromisoformat(item["published_at"]).date().isoformat() == current_bj_date
     ]
 
     if len(todays_items) >= min_items:
@@ -342,7 +352,20 @@ def clean_ai_content(content: str) -> str:
     return stripped
 
 
-def process_news_with_ai(news_data: list[dict[str, str]], system_prompt: str) -> str:
+def build_system_prompt(base_prompt: str, current_bj_date: str) -> str:
+    return (
+        f"{base_prompt}\n\n"
+        "# 日期一致性强制规则\n"
+        f"今天是 {current_bj_date}。请在生成简报正文的开头严格使用这个具体日期，"
+        "绝不允许随意编造历史时间、未来时间或与该日期不一致的日期。"
+    )
+
+
+def process_news_with_ai(
+    news_data: list[dict[str, str]],
+    system_prompt: str,
+    current_bj_date: str,
+) -> str:
     if not news_data:
         raise ValueError("news_data 为空，无法交由 AI 分析。")
 
@@ -356,6 +379,7 @@ def process_news_with_ai(news_data: list[dict[str, str]], system_prompt: str) ->
 
     client = OpenAI(api_key=api_key, base_url=base_url)
     news_text = format_news_for_ai(news_data)
+    final_system_prompt = build_system_prompt(system_prompt, current_bj_date)
 
     print(f"🧠 正在交由 DeepSeek AI 分析筛选，模型：{model} ...")
     try:
@@ -363,7 +387,7 @@ def process_news_with_ai(news_data: list[dict[str, str]], system_prompt: str) ->
             model=model,
             temperature=0.3,
             messages=[
-                {"role": "system", "content": system_prompt},
+                {"role": "system", "content": final_system_prompt},
                 {"role": "user", "content": news_text},
             ],
         )
@@ -383,13 +407,17 @@ def process_news_with_ai(news_data: list[dict[str, str]], system_prompt: str) ->
     return clean_ai_content(content)
 
 
-def save_to_markdown(content: str, report_profile: dict[str, Any]) -> Path:
+def save_to_markdown(
+    content: str,
+    report_profile: dict[str, Any],
+    run_context: dict[str, Any],
+) -> Path:
     posts_dir = Path("_posts")
     posts_dir.mkdir(parents=True, exist_ok=True)
 
-    beijing_now = get_beijing_now()
-    post_date = beijing_now.strftime("%Y-%m-%d")
-    post_time = beijing_now.strftime("%H%M%S")
+    beijing_now = run_context["beijing_now"]
+    post_date = run_context["current_bj_date"]
+    post_time = run_context["current_bj_time"]
     post_title = f"印尼商业风向标：{post_date} [{report_profile['label']}]"
     filename = (
         f"{post_date}-{report_profile['filename_prefix']}"
@@ -413,10 +441,13 @@ def save_to_markdown(content: str, report_profile: dict[str, Any]) -> Path:
     return output_path
 
 
-def save_raw_news_to_markdown(news_data: list[dict[str, str]]) -> Path:
+def save_raw_news_to_markdown(
+    news_data: list[dict[str, str]],
+    run_context: dict[str, Any],
+) -> Path:
     output_dir = Path("outputs")
     output_dir.mkdir(parents=True, exist_ok=True)
-    beijing_today = get_beijing_now().strftime("%Y%m%d")
+    beijing_today = run_context["current_bj_date"].replace("-", "")
     output_path = output_dir / f"OpenClaw_ID_News_Raw_{beijing_today}.md"
 
     lines = [
@@ -454,12 +485,16 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    report_profile = get_report_profile()
+    run_context = get_run_context()
+    report_profile = get_report_profile(run_context)
     print("====== OpenClaw 印尼商业新闻自动化脚本 ======")
-    print(f"🕒 当前北京时间：{get_beijing_now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"🕒 当前北京时间：{run_context['current_bj_datetime']}")
     print(f"🧭 当前报告模式：{report_profile['label']}")
     print("🚀 正在抓取印尼新闻源...")
-    news_data = fetch_indonesia_news(report_profile["rss_sources"])
+    news_data = fetch_indonesia_news(
+        report_profile["rss_sources"],
+        run_context["current_bj_date"],
+    )
     print(f"✅ 已整理 {len(news_data)} 条候选新闻。")
 
     if args.fetch_only:
@@ -470,14 +505,18 @@ def main() -> None:
         return
 
     try:
-        content = process_news_with_ai(news_data, report_profile["system_prompt"])
+        content = process_news_with_ai(
+            news_data,
+            report_profile["system_prompt"],
+            run_context["current_bj_date"],
+        )
     except RuntimeError as exc:
-        raw_output_path = save_raw_news_to_markdown(news_data)
+        raw_output_path = save_raw_news_to_markdown(news_data, run_context)
         print(f"❌ AI 处理失败：{exc}")
         print(f"📝 已先保存候选新闻原始列表：{raw_output_path}")
         raise SystemExit(1) from exc
 
-    output_path = save_to_markdown(content, report_profile)
+    output_path = save_to_markdown(content, report_profile, run_context)
     print(f"✅ 简报已生成：{output_path}")
 
 
