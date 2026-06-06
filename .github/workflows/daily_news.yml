@@ -6,6 +6,9 @@ on:
     - cron: "47 23 * * *"
     # GitHub Actions cron uses UTC. Beijing 17:45 (UTC+8) = UTC 09:45.
     - cron: "45 9 * * *"
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -63,7 +66,7 @@ jobs:
           fi
 
       - name: Generate daily brief
-        if: steps.today-post.outputs.exists != 'true'
+        if: github.event_name != 'push' && steps.today-post.outputs.exists != 'true'
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           DEEPSEEK_BASE_URL: https://api.deepseek.com
@@ -71,7 +74,7 @@ jobs:
         run: python main.py
 
       - name: Commit and push generated post
-        if: steps.today-post.outputs.exists != 'true'
+        if: github.event_name != 'push' && steps.today-post.outputs.exists != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
