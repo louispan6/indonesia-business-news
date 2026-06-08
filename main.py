@@ -7,6 +7,7 @@ from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
+from urllib.parse import urljoin
 
 import feedparser
 import requests
@@ -21,17 +22,19 @@ OUTPUT_RULES = """
 # 输出规范（死守中国出海企业视角）
 1. 严禁输出任何寒暄、解释、确认语或元叙述，例如“好的，老板”“已为您筛选”“以下是”等。
 2. 第一行必须直接输出 Markdown 二级标题：## 今日印尼市场情报简报（YYYY年M月D日）
-3. 每条新闻必须配一张图片：如果候选新闻提供 Image URL，必须在标题下方输出 `![图片说明](Image URL)`。
+3. 每条新闻必须配一张图片：如果候选新闻提供 Image URL，必须在标题下方紧跟一行 `![图片说明](Image URL)`。不要写“配图”“图片来源”等标签。
 4. 标题重构：必须前置“核心数据”“关键动作”或“监管信号”，让人一眼看透利好、利空或风险方向。
-5. 每条新闻必须写得具体，不能只写结论。必须交代重点、前因后果、主要内容和对中国出海企业的影响。
-6. 结构化输出：每条新闻严格按以下五段式输出：
+5. 写作风格必须像正式商业情报报告，不要像填表，不要使用“重点：”“前因后果：”“主要内容：”“出海影响：”这类栏目标签。
+6. 每条新闻必须写得具体，不能只写结论。必须自然交代重点、前因后果、主要内容和对中国出海企业的影响。
+7. 每条新闻严格按以下文章式结构输出：
    - `### [序号]. [提炼后的硬核标题，加适当 Emoji]`
-   - `**重点：** [2-3句话说明这条新闻最关键的变化、数字、机构或动作，让读者快速知道为什么重要]`
-   - `**前因后果：** [120-180字说明事件背景、政策脉络、相关利益方、为什么现在发生，以及可能的后续走向]`
-   - `**主要内容：** [150-220字具体展开新闻事实，保留重要数据、地点、机构、人物、时间、政策名称、产业链位置或执法动作]`
-   - `**出海影响：** [120-180字直接分析对中国企业的影响，必须落到合规成本、清关/签证/税务风险、供应链成本、市场机会、渠道变化、政府项目或资产安全等具体维度]`
-7. 不要使用项目符号列表；每条新闻之间空一行。
-8. 每篇简报选择 3-5 条新闻即可，但每条必须有信息密度，宁可少选也不要写空泛概括。
+   - `![图片说明](Image URL)`
+   - 第 1 段：用 120-180 字讲清新闻的核心事实、关键数据、涉及机构或动作，让读者快速知道发生了什么。
+   - 第 2 段：用 160-240 字解释背景、政策脉络、利益相关方、为什么现在发生，以及后续可能如何演变。
+   - 第 3 段：用 160-240 字具体展开对中国出海企业的影响，必须落到合规成本、清关/签证/税务风险、供应链成本、市场机会、渠道变化、政府项目或资产安全等具体维度。
+   - 如信息量足够，可加第 4 段，补充操作建议或需要继续观察的信号。
+8. 不要使用项目符号列表；每条新闻之间空一行。
+9. 每篇简报选择 3-5 条新闻即可，但每条必须有信息密度，宁可少选也不要写空泛概括。
 """
 
 
@@ -200,6 +203,43 @@ def extract_image_url(entry: Any) -> str:
     return ""
 
 
+def fetch_article_image_url(article_url: str, timeout: int = 10) -> str:
+    """Fetch article page and extract Open Graph/Twitter image URL."""
+    if not article_url:
+        return ""
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/125.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+
+    try:
+        response = requests.get(article_url, headers=headers, timeout=timeout)
+        response.raise_for_status()
+    except requests.RequestException:
+        return ""
+
+    page_html = response.text
+    patterns = [
+        r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']',
+        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
+        r'<meta[^>]+name=["\']twitter:image["\'][^>]+content=["\']([^"\']+)["\']',
+        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']twitter:image["\']',
+        r'<link[^>]+rel=["\']image_src["\'][^>]+href=["\']([^"\']+)["\']',
+    ]
+
+    for pattern in patterns:
+        image_match = re.search(pattern, page_html, re.I)
+        if image_match:
+            return urljoin(article_url, html.unescape(image_match.group(1)).strip())
+
+    return ""
+
+
 def parse_entry_datetime(entry: Any, fallback_tz: timezone) -> datetime:
     """Parse common RSS datetime fields into timezone-aware datetime."""
     for field in ("published_parsed", "updated_parsed", "created_parsed"):
@@ -247,6 +287,8 @@ def fetch_feed(source_name: str, rss_url: str, timeout: int = 20) -> list[dict[s
             or ""
         )
         image_url = extract_image_url(entry)
+        if not image_url:
+            image_url = fetch_article_image_url(link)
 
         if not title or not link:
             continue
