@@ -40,7 +40,7 @@ OUTPUT_RULES = """
 
 MORNING_SYSTEM_PROMPT = f"""
 # 角色设定
-你是一位常驻雅加达的政商安全顾问。你的唯一任务是预警政治与合规风险，专门为中国出海企业家、跨境电商卖家和外贸从业者识别印尼政法与监管冲击。
+你是一位常驻雅加达的政商与政策观察员。你的核心任务是预警政治、监管与本地政策变化，专门为中国出海企业家、跨境电商卖家和外贸从业者识别印尼政法、行政审批、地方治理和营商环境变化。
 
 # 任务目标
 我将提供一批今日印尼新闻的原始标题和摘要（印尼语或英语）。你的任务是：
@@ -48,11 +48,14 @@ MORNING_SYSTEM_PROMPT = f"""
 2. 【重构翻译】将选出的新闻转化为符合中国顶尖财经媒体排版习惯的中文政经风险简报。
 
 # 早间政经内参强制筛选规则
-- 你必须重点寻找包含以下机构或动作的新闻：移民局(Imigrasi)抓捕/遣返、反贪局(KPK)调查、海关(Bea Cukai)严查、部长级高官落马、针对外籍劳工(TKA)的新政。
-- 必须优先选择：政府突发监管、贪腐调查、官员落马、外籍劳工政策、海关稽查、签证/居留审查、政府招标风向、外资审批变化和对外企资产安全有影响的事件。
+- 第一优先级：重点寻找包含以下机构或动作的新闻：移民局(Imigrasi)抓捕/遣返、反贪局(KPK)调查、海关(Bea Cukai)严查、部长级高官落马、针对外籍劳工(TKA)的新政。
+- 第二优先级：如果当天没有足够重大的抓捕、反腐或执法新闻，必须主动转向筛选对营商环境有影响的印尼本地政策新闻，包括税务征管、劳工监管、签证/居留、进口许可、海关流程、地方政府许可、政府采购、产业园区、土地/环保审批、能源价格、物流交通、数字政务、投资便利化、地方最低工资和中小企业政策。
+- 第三优先级：如果没有全国性大政策，也可以选择省市级政策、政府部门执行口径、行业监管口径和官方经济治理信号，但必须说明它为什么会影响中国企业的市场进入、合规成本、供应链安全或本地化经营。
+- 必须优先选择：政府突发监管、贪腐调查、官员落马、外籍劳工政策、海关稽查、签证/居留审查、政府招标风向、外资审批变化、地方营商政策、财政税务执行口径、投资许可变化和对外企资产安全有影响的事件。
 - 每条新闻必须直接回答：这件事会如何影响中国出海企业的工作签证、外籍员工、海关清关、税务稽查、政府项目、资产安全、本地合作伙伴和合规成本。
-- 如果抓取到的新闻全是软性的会议通稿或政客口水战，请宁缺毋滥，仅挑选那些对中国出海企业有直接合规警告或资产安全影响的事件。
-- 坚决过滤：普通会议通稿、政客表态、无监管动作的口水战、单纯刑事案件、娱乐八卦、没有外溢商业风险的地方新闻。
+- 如果抓取到的新闻全是软性的会议通稿或政客口水战，请优先寻找其中是否包含政策执行、预算方向、监管权限、许可流程、地方治理或产业资源配置变化；仍然没有实质信息时再过滤。
+- 不要只盯“谁被抓”。普通抓捕新闻如果不能引出移民、海关、反腐、招投标、外劳、资产安全或企业合规影响，应当过滤。
+- 坚决过滤：无政策含义的普通会议通稿、政客表态、无监管动作的口水战、单纯刑事案件、娱乐八卦、没有外溢商业风险或经营含义的地方新闻。
 
 {OUTPUT_RULES}
 """
@@ -82,12 +85,56 @@ MORNING_RSS_SOURCES = [
         "url": "https://news.detik.com/hukum/rss",
     },
     {
+        "source": "Detik Nasional",
+        "url": "https://news.detik.com/berita/rss",
+    },
+    {
         "source": "Kompas Nasional",
         "url": "https://nasional.kompas.com/rss",
     },
     {
+        "source": "CNN Indonesia Nasional",
+        "url": "https://www.cnnindonesia.com/nasional/rss",
+    },
+    {
         "source": "ANTARA Hukum",
         "url": "https://www.antaranews.com/rss/hukum.xml",
+    },
+    {
+        "source": "ANTARA Politik",
+        "url": "https://www.antaranews.com/rss/politik.xml",
+    },
+    {
+        "source": "ANTARA Terkini",
+        "url": "https://www.antaranews.com/rss/terkini.xml",
+    },
+    {
+        "source": "ANTARA Ekonomi",
+        "url": "https://www.antaranews.com/rss/ekonomi.xml",
+    },
+    {
+        "source": "Sekretariat Kabinet RI",
+        "url": "https://setkab.go.id/feed/",
+    },
+    {
+        "source": "Tempo Nasional",
+        "url": "https://rss.tempo.co/nasional",
+    },
+    {
+        "source": "Kontan Nasional",
+        "url": "https://nasional.kontan.co.id/rss",
+    },
+    {
+        "source": "Kontan Keuangan",
+        "url": "https://keuangan.kontan.co.id/rss",
+    },
+    {
+        "source": "Tempo Bisnis",
+        "url": "https://rss.tempo.co/bisnis",
+    },
+    {
+        "source": "Kompas Money",
+        "url": "https://money.kompas.com/rss",
     },
 ]
 
@@ -98,12 +145,64 @@ EVENING_RSS_SOURCES = [
         "url": "https://www.cnbcindonesia.com/news/rss",
     },
     {
+        "source": "Detik Finance",
+        "url": "https://finance.detik.com/rss",
+    },
+    {
+        "source": "CNN Indonesia Ekonomi",
+        "url": "https://www.cnnindonesia.com/ekonomi/rss",
+    },
+    {
         "source": "ANTARA Ekonomi",
         "url": "https://www.antaranews.com/rss/ekonomi.xml",
     },
     {
         "source": "ANTARA Bisnis",
         "url": "https://www.antaranews.com/rss/ekonomi-bisnis.xml",
+    },
+    {
+        "source": "ANTARA Terkini",
+        "url": "https://www.antaranews.com/rss/terkini.xml",
+    },
+    {
+        "source": "Tempo Bisnis",
+        "url": "https://rss.tempo.co/bisnis",
+    },
+    {
+        "source": "Kompas Money",
+        "url": "https://money.kompas.com/rss",
+    },
+    {
+        "source": "Bisnis Indonesia Ekonomi",
+        "url": "https://ekonomi.bisnis.com/rss",
+    },
+    {
+        "source": "Kontan Keuangan",
+        "url": "https://keuangan.kontan.co.id/rss",
+    },
+    {
+        "source": "Kontan Industri",
+        "url": "https://industri.kontan.co.id/rss",
+    },
+    {
+        "source": "Kontan Investasi",
+        "url": "https://investasi.kontan.co.id/rss",
+    },
+    {
+        "source": "Kontan Nasional",
+        "url": "https://nasional.kontan.co.id/rss",
+    },
+    {
+        "source": "Okezone Economy",
+        "url": "https://economy.okezone.com/rss",
+    },
+    {
+        "source": "Liputan6 Bisnis",
+        "url": "https://www.liputan6.com/rss/bisnis",
+    },
+    {
+        "source": "Republika Ekonomi",
+        "url": "https://ekonomi.republika.co.id/rss",
     },
 ]
 
@@ -265,10 +364,18 @@ def normalize_for_dedupe(text: str) -> str:
     return re.sub(r"\W+", "", text.lower())
 
 
+def normalize_url_for_dedupe(url: str) -> str:
+    return url.strip().rstrip("/")
+
+
 def fetch_feed(source_name: str, rss_url: str, timeout: int = 20) -> list[dict[str, Any]]:
     print(f"🚀 正在抓取 {source_name} 新闻源...")
     headers = {
-        "User-Agent": "OpenClaw-ID-NewsBot/1.0 (+https://openclaw.local)",
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/125.0 Safari/537.36"
+        ),
         "Accept": "application/rss+xml, application/xml, text/xml, */*",
     }
     response = requests.get(rss_url, headers=headers, timeout=timeout)
@@ -319,10 +426,18 @@ def fetch_feed(source_name: str, rss_url: str, timeout: int = 20) -> list[dict[s
 def fetch_indonesia_news(
     rss_sources: list[dict[str, str]],
     current_bj_date: str,
-    max_items: int = 20,
+    exclude_links: set[str] | None = None,
+    max_items: int = 36,
     min_items: int = 15,
+    per_source_limit: int = 5,
 ) -> list[dict[str, str]]:
-    """Fetch today's latest Indonesia business news from configured RSS sources."""
+    """Fetch today's latest Indonesia news from configured RSS sources.
+
+    The source list is intentionally broader than the final candidate count. To
+    avoid one high-volume RSS feed crowding out policy or finance sources, this
+    first keeps a small number of fresh items from each source, then fills any
+    remaining slots with the newest items overall.
+    """
     collected: list[dict[str, Any]] = []
 
     for source in rss_sources:
@@ -334,14 +449,21 @@ def fetch_indonesia_news(
     if not collected:
         raise RuntimeError("没有抓取到任何新闻，请检查网络、RSS 地址或代理设置。")
 
+    normalized_exclude_links = {
+        normalize_url_for_dedupe(link) for link in (exclude_links or set())
+    }
     unique_by_link: dict[str, dict[str, Any]] = {}
     seen_titles: set[str] = set()
     for item in collected:
+        normalized_link = normalize_url_for_dedupe(item["link"])
+        if normalized_link in normalized_exclude_links:
+            continue
+
         normalized_title = normalize_for_dedupe(item["title"])
         if normalized_title in seen_titles:
             continue
         seen_titles.add(normalized_title)
-        unique_by_link[item["link"]] = item
+        unique_by_link[normalized_link] = item
 
     sorted_items = sorted(
         unique_by_link.values(),
@@ -353,19 +475,48 @@ def fetch_indonesia_news(
         item for item in sorted_items
         if datetime.fromisoformat(item["published_at"]).date().isoformat() == current_bj_date
     ]
+    print(
+        f"🧮 去重后剩余 {len(sorted_items)} 条；其中 {current_bj_date} "
+        f"未发布过的当天新闻 {len(todays_items)} 条。"
+    )
 
     if not todays_items:
         raise RuntimeError(
-            f"{current_bj_date} 没有抓取到当天新闻，已停止生成，避免重复发布旧闻。"
+            f"{current_bj_date} 没有抓取到未发布过的当天新闻，已停止生成，避免重复发布旧闻。"
         )
 
-    selected = todays_items[:max_items]
+    by_source: dict[str, list[dict[str, Any]]] = {}
+    for item in todays_items:
+        by_source.setdefault(item["source"], []).append(item)
+
+    selected_by_link: dict[str, dict[str, Any]] = {}
+    for source in rss_sources:
+        source_name = source["source"]
+        for item in by_source.get(source_name, [])[:per_source_limit]:
+            selected_by_link[normalize_url_for_dedupe(item["link"])] = item
+            if len(selected_by_link) >= max_items:
+                break
+        if len(selected_by_link) >= max_items:
+            break
+
+    if len(selected_by_link) < max_items:
+        for item in todays_items:
+            selected_by_link[normalize_url_for_dedupe(item["link"])] = item
+            if len(selected_by_link) >= max_items:
+                break
+
+    selected = sorted(
+        selected_by_link.values(),
+        key=lambda item: item["published_at"],
+        reverse=True,
+    )[:max_items]
+
     if len(todays_items) < min_items:
         print(
             f"⚠️  今日新闻仅 {len(todays_items)} 条，将严格只使用当天新闻，不补旧闻。"
         )
     else:
-        print(f"✅ 今日新闻满足数量要求，选取 {len(selected)} 条。")
+        print(f"✅ 今日新闻满足数量要求，已按来源平衡选取 {len(selected)} 条。")
 
     return [
         {
@@ -380,10 +531,106 @@ def fetch_indonesia_news(
     ]
 
 
-def format_news_for_ai(news_data: list[dict[str, str]]) -> str:
+def load_recent_post_links(
+    current_bj_date: str,
+    report_profile: dict[str, Any],
+    max_days: int = 7,
+) -> set[str]:
+    posts_dir = Path("_posts")
+    if not posts_dir.exists():
+        return set()
+
+    current_date = datetime.strptime(current_bj_date, "%Y-%m-%d").date()
+    earliest_date = current_date - timedelta(days=max_days)
+    filename_marker = f"-{report_profile['filename_prefix']}-"
+    links: set[str] = set()
+
+    for post_path in sorted(posts_dir.glob("*.md"), reverse=True):
+        if filename_marker not in post_path.name:
+            continue
+
+        date_match = re.match(r"(\d{4}-\d{2}-\d{2})-", post_path.name)
+        if not date_match:
+            continue
+
+        post_date = datetime.strptime(date_match.group(1), "%Y-%m-%d").date()
+        if post_date >= current_date or post_date < earliest_date:
+            continue
+
+        try:
+            post_text = post_path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+
+        for raw_link in re.findall(r"https?://[^\s)\]]+", post_text):
+            links.add(normalize_url_for_dedupe(raw_link))
+
+    return links
+
+
+def load_recent_post_headlines(
+    current_bj_date: str,
+    report_profile: dict[str, Any],
+    max_days: int = 7,
+    limit: int = 30,
+) -> list[str]:
+    posts_dir = Path("_posts")
+    if not posts_dir.exists():
+        return []
+
+    current_date = datetime.strptime(current_bj_date, "%Y-%m-%d").date()
+    earliest_date = current_date - timedelta(days=max_days)
+    filename_marker = f"-{report_profile['filename_prefix']}-"
+    headlines: list[str] = []
+
+    for post_path in sorted(posts_dir.glob("*.md"), reverse=True):
+        if filename_marker not in post_path.name:
+            continue
+
+        date_match = re.match(r"(\d{4}-\d{2}-\d{2})-", post_path.name)
+        if not date_match:
+            continue
+
+        post_date = datetime.strptime(date_match.group(1), "%Y-%m-%d").date()
+        if post_date >= current_date or post_date < earliest_date:
+            continue
+
+        try:
+            post_text = post_path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+
+        for line in post_text.splitlines():
+            if not line.startswith("### "):
+                continue
+            headline = re.sub(r"^###\s*\d+[.、]\s*", "", line).strip()
+            if headline:
+                headlines.append(headline)
+            if len(headlines) >= limit:
+                return headlines
+
+    return headlines
+
+
+def format_news_for_ai(
+    news_data: list[dict[str, str]],
+    recent_headlines: list[str] | None = None,
+) -> str:
     lines = [
         "以下是今日抓取到的印尼新闻候选列表，请按系统要求筛选、翻译并重构："
     ]
+    if recent_headlines:
+        lines.extend(
+            [
+                "",
+                "以下是最近几天同类简报已经写过的标题。除非候选新闻出现实质新进展、关键数字变化或监管动作升级，否则不要重复选择这些旧主题：",
+            ]
+        )
+        for index, headline in enumerate(recent_headlines, start=1):
+            lines.append(f"{index}. {headline}")
+
+        lines.append("")
+
     for index, item in enumerate(news_data, start=1):
         lines.append(
             "\n".join(
@@ -427,6 +674,7 @@ def process_news_with_ai(
     news_data: list[dict[str, str]],
     system_prompt: str,
     current_bj_date: str,
+    recent_headlines: list[str] | None = None,
 ) -> str:
     if not news_data:
         raise ValueError("news_data 为空，无法交由 AI 分析。")
@@ -440,7 +688,7 @@ def process_news_with_ai(
         raise RuntimeError("未检测到 DEEPSEEK_API_KEY，请先在 .env 文件中配置。")
 
     client = OpenAI(api_key=api_key, base_url=base_url)
-    news_text = format_news_for_ai(news_data)
+    news_text = format_news_for_ai(news_data, recent_headlines)
     final_system_prompt = build_system_prompt(system_prompt, current_bj_date)
 
     print(f"🧠 正在交由 DeepSeek AI 分析筛选，模型：{model} ...")
@@ -474,6 +722,7 @@ def save_to_markdown(
     content: str,
     report_profile: dict[str, Any],
     run_context: dict[str, Any],
+    news_data: list[dict[str, str]],
 ) -> Path:
     posts_dir = Path("_posts")
     posts_dir.mkdir(parents=True, exist_ok=True)
@@ -500,7 +749,22 @@ def save_to_markdown(
             "",
         ]
     )
-    output_path.write_text(front_matter + content.strip() + "\n", encoding="utf-8")
+
+    source_audit_lines = [
+        "<!--",
+        "source_candidates:",
+    ]
+    for item in news_data:
+        source_audit_lines.append(
+            f"- {item['source']} | {item['published_at']} | {item['title']} | {item['link']}"
+        )
+    source_audit_lines.extend(["-->", ""])
+    source_audit = "\n".join(source_audit_lines)
+
+    output_path.write_text(
+        front_matter + content.strip() + "\n\n" + source_audit + "\n",
+        encoding="utf-8",
+    )
     return output_path
 
 
@@ -553,12 +817,26 @@ def main() -> None:
     print("====== OpenClaw 印尼商业新闻自动化脚本 ======")
     print(f"🕒 当前北京时间：{run_context['current_bj_datetime']}")
     print(f"🧭 当前报告模式：{report_profile['label']}")
+    recent_links = load_recent_post_links(
+        run_context["current_bj_date"],
+        report_profile,
+    )
+    if recent_links:
+        print(f"🧹 已读取最近同类文章链接 {len(recent_links)} 条，用于过滤重复候选。")
+
     print("🚀 正在抓取印尼新闻源...")
     news_data = fetch_indonesia_news(
         report_profile["rss_sources"],
         run_context["current_bj_date"],
+        exclude_links=recent_links,
     )
     print(f"✅ 已整理 {len(news_data)} 条候选新闻。")
+    recent_headlines = load_recent_post_headlines(
+        run_context["current_bj_date"],
+        report_profile,
+    )
+    if recent_headlines:
+        print(f"🧹 已读取最近同类文章标题 {len(recent_headlines)} 条，用于降低重复选题。")
 
     if args.fetch_only:
         print("\n以下为抓取结果预览：")
@@ -572,6 +850,7 @@ def main() -> None:
             news_data,
             report_profile["system_prompt"],
             run_context["current_bj_date"],
+            recent_headlines,
         )
     except RuntimeError as exc:
         raw_output_path = save_raw_news_to_markdown(news_data, run_context)
@@ -579,7 +858,7 @@ def main() -> None:
         print(f"📝 已先保存候选新闻原始列表：{raw_output_path}")
         raise SystemExit(1) from exc
 
-    output_path = save_to_markdown(content, report_profile, run_context)
+    output_path = save_to_markdown(content, report_profile, run_context, news_data)
     print(f"✅ 简报已生成：{output_path}")
 
 
