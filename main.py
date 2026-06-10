@@ -240,7 +240,7 @@ def fetch_article_image_url(article_url: str, timeout: int = 10) -> str:
     return ""
 
 
-def parse_entry_datetime(entry: Any, fallback_tz: timezone) -> datetime:
+def parse_entry_datetime(entry: Any, fallback_tz: timezone) -> datetime | None:
     """Parse common RSS datetime fields into timezone-aware datetime."""
     for field in ("published_parsed", "updated_parsed", "created_parsed"):
         parsed_value = entry.get(field)
@@ -258,7 +258,11 @@ def parse_entry_datetime(entry: Any, fallback_tz: timezone) -> datetime:
             except (TypeError, ValueError):
                 continue
 
-    return datetime.now(fallback_tz)
+    return None
+
+
+def normalize_for_dedupe(text: str) -> str:
+    return re.sub(r"\W+", "", text.lower())
 
 
 def fetch_feed(source_name: str, rss_url: str, timeout: int = 20) -> list[dict[str, Any]]:
@@ -278,6 +282,9 @@ def fetch_feed(source_name: str, rss_url: str, timeout: int = 20) -> list[dict[s
 
     for entry in parsed_feed.entries:
         published_at = parse_entry_datetime(entry, BEIJING_TZ)
+        if published_at is None:
+            continue
+
         title = clean_html(entry.get("title", ""))
         link = entry.get("link", "").strip()
         summary = clean_html(
@@ -328,7 +335,12 @@ def fetch_indonesia_news(
         raise RuntimeError("没有抓取到任何新闻，请检查网络、RSS 地址或代理设置。")
 
     unique_by_link: dict[str, dict[str, Any]] = {}
+    seen_titles: set[str] = set()
     for item in collected:
+        normalized_title = normalize_for_dedupe(item["title"])
+        if normalized_title in seen_titles:
+            continue
+        seen_titles.add(normalized_title)
         unique_by_link[item["link"]] = item
 
     sorted_items = sorted(
@@ -342,14 +354,18 @@ def fetch_indonesia_news(
         if datetime.fromisoformat(item["published_at"]).date().isoformat() == current_bj_date
     ]
 
-    if len(todays_items) >= min_items:
-        selected = todays_items[:max_items]
-        print(f"✅ 今日新闻满足数量要求，选取 {len(selected)} 条。")
-    else:
-        selected = sorted_items[:max_items]
-        print(
-            f"⚠️  今日新闻仅 {len(todays_items)} 条，已补充最近新闻至 {len(selected)} 条。"
+    if not todays_items:
+        raise RuntimeError(
+            f"{current_bj_date} 没有抓取到当天新闻，已停止生成，避免重复发布旧闻。"
         )
+
+    selected = todays_items[:max_items]
+    if len(todays_items) < min_items:
+        print(
+            f"⚠️  今日新闻仅 {len(todays_items)} 条，将严格只使用当天新闻，不补旧闻。"
+        )
+    else:
+        print(f"✅ 今日新闻满足数量要求，选取 {len(selected)} 条。")
 
     return [
         {
