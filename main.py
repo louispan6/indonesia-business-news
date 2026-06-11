@@ -34,7 +34,7 @@ OUTPUT_RULES = """
    - 第 3 段：用 160-240 字具体展开对中国出海企业的影响，必须落到合规成本、清关/签证/税务风险、供应链成本、市场机会、渠道变化、政府项目或资产安全等具体维度。
    - 如信息量足够，可加第 4 段，补充操作建议或需要继续观察的信号。
 8. 不要使用项目符号列表；每条新闻之间空一行。
-9. 每篇简报选择 3-5 条新闻即可，但每条必须有信息密度，宁可少选也不要写空泛概括。
+9. 每篇简报的新闻条数以对应报告模式要求为准；每条必须有信息密度，不要写空泛概括。
 """
 
 
@@ -44,10 +44,11 @@ MORNING_SYSTEM_PROMPT = f"""
 
 # 任务目标
 我将提供一批今日印尼新闻的原始标题和摘要（印尼语或英语）。你的任务是：
-1. 【强制风险过滤】从繁杂资讯中挑选最值得中国出海企业警惕的 1-5 条核心风险新闻。
+1. 【强制风险过滤】从繁杂资讯中挑选最值得中国出海企业警惕的 5 条核心政经与政策新闻，必须正好输出 5 条，不得少于 5 条。
 2. 【重构翻译】将选出的新闻转化为符合中国顶尖财经媒体排版习惯的中文政经风险简报。
 
 # 早间政经内参强制筛选规则
+- 早间财经内参必须固定输出 5 条。即使当天没有重大抓捕、反腐或执法新闻，也要从税务、海关、投资许可、地方政策、产业监管、财政预算、政府采购、劳工签证、能源物流和营商环境新闻中补足 5 条。
 - 第一优先级：重点寻找包含以下机构或动作的新闻：移民局(Imigrasi)抓捕/遣返、反贪局(KPK)调查、海关(Bea Cukai)严查、部长级高官落马、针对外籍劳工(TKA)的新政。
 - 第二优先级：如果当天没有足够重大的抓捕、反腐或执法新闻，必须主动转向筛选对营商环境有影响的印尼本地政策新闻，包括税务征管、劳工监管、签证/居留、进口许可、海关流程、地方政府许可、政府采购、产业园区、土地/环保审批、能源价格、物流交通、数字政务、投资便利化、地方最低工资和中小企业政策。
 - 第三优先级：如果没有全国性大政策，也可以选择省市级政策、政府部门执行口径、行业监管口径和官方经济治理信号，但必须说明它为什么会影响中国企业的市场进入、合规成本、供应链安全或本地化经营。
@@ -71,6 +72,7 @@ EVENING_SYSTEM_PROMPT = f"""
 2. 【重构翻译】将选出的新闻转化为符合中国顶尖财经媒体排版习惯的中文简报。
 
 # 晚间市场观察筛选标准
+- 晚间市场观察选择 3-5 条新闻即可，但每条必须有明确数据、产业含义或市场影响。
 - 重点筛选：宏观经济数据（汇率、通胀、贸易、财政）、民生消费热点、重点产业动态（如新能源、电商、基建、制造业、物流、矿业和农业）。
 - 必须深度剖析这些【民生与经济数据】对中国出海企业的直接影响，例如国民消费力降级、特定赛道爆发、供应链成本涨跌、清关风险、渠道价格变化和投资窗口。
 - 坚决过滤：娱乐八卦、单纯社会治安事件、没有数据或产业含义的企业公关稿。
@@ -232,6 +234,7 @@ def get_report_profile(run_context: dict[str, Any]) -> dict[str, Any]:
             "filename_prefix": "morning",
             "rss_sources": MORNING_RSS_SOURCES,
             "system_prompt": MORNING_SYSTEM_PROMPT,
+            "required_item_count": 5,
         }
 
     return {
@@ -240,6 +243,7 @@ def get_report_profile(run_context: dict[str, Any]) -> dict[str, Any]:
         "filename_prefix": "evening",
         "rss_sources": EVENING_RSS_SOURCES,
         "system_prompt": EVENING_SYSTEM_PROMPT,
+        "required_item_count": None,
     }
 
 
@@ -661,12 +665,26 @@ def clean_ai_content(content: str) -> str:
     return stripped
 
 
-def build_system_prompt(base_prompt: str, current_bj_date: str) -> str:
+def build_system_prompt(
+    base_prompt: str,
+    current_bj_date: str,
+    required_item_count: int | None = None,
+) -> str:
+    count_rule = ""
+    if required_item_count is not None:
+        count_rule = (
+            "\n\n# 条数强制规则\n"
+            f"本次简报必须正好输出 {required_item_count} 条新闻。"
+            f"标题编号必须从 1 到 {required_item_count}，不得少于或多于该数量。"
+            "如果硬风险新闻不足，请用政策、财政、税务、海关、投资许可、地方营商环境、产业监管或政府采购类新闻补足。"
+        )
+
     return (
         f"{base_prompt}\n\n"
         "# 日期一致性强制规则\n"
         f"今天是 {current_bj_date}。请在生成简报正文的开头严格使用这个具体日期，"
         "绝不允许随意编造历史时间、未来时间或与该日期不一致的日期。"
+        f"{count_rule}"
     )
 
 
@@ -675,6 +693,7 @@ def process_news_with_ai(
     system_prompt: str,
     current_bj_date: str,
     recent_headlines: list[str] | None = None,
+    required_item_count: int | None = None,
 ) -> str:
     if not news_data:
         raise ValueError("news_data 为空，无法交由 AI 分析。")
@@ -689,7 +708,11 @@ def process_news_with_ai(
 
     client = OpenAI(api_key=api_key, base_url=base_url)
     news_text = format_news_for_ai(news_data, recent_headlines)
-    final_system_prompt = build_system_prompt(system_prompt, current_bj_date)
+    final_system_prompt = build_system_prompt(
+        system_prompt,
+        current_bj_date,
+        required_item_count,
+    )
 
     print(f"🧠 正在交由 DeepSeek AI 分析筛选，模型：{model} ...")
     try:
@@ -851,6 +874,7 @@ def main() -> None:
             report_profile["system_prompt"],
             run_context["current_bj_date"],
             recent_headlines,
+            report_profile.get("required_item_count"),
         )
     except RuntimeError as exc:
         raw_output_path = save_raw_news_to_markdown(news_data, run_context)
