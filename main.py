@@ -68,13 +68,14 @@ EVENING_SYSTEM_PROMPT = f"""
 
 # 任务目标
 我将提供一批今日印尼新闻的原始标题和摘要（印尼语或英语）。你的任务是：
-1. 【毒辣筛选】从繁杂资讯中挑选最值得中国出海企业关注的 3-5 条核心新闻。
+1. 【毒辣筛选】从繁杂资讯中挑选最值得中国出海企业关注的 5 条核心新闻，必须正好输出 5 条，不得少于 5 条。
 2. 【重构翻译】将选出的新闻转化为符合中国顶尖财经媒体排版习惯的中文简报。
 
 # 晚间市场观察筛选标准
-- 晚间市场观察选择 3-5 条新闻即可，但每条必须有明确数据、产业含义或市场影响。
+- 晚间市场观察必须固定输出 5 条新闻。每条必须有明确数据、产业含义或市场影响，不得用同一事件、同一政策或同一行业口径拆成多条凑数。
 - 重点筛选：宏观经济数据（汇率、通胀、贸易、财政）、民生消费热点、重点产业动态（如新能源、电商、基建、制造业、物流、矿业和农业）。
 - 必须深度剖析这些【民生与经济数据】对中国出海企业的直接影响，例如国民消费力降级、特定赛道爆发、供应链成本涨跌、清关风险、渠道价格变化和投资窗口。
+- 如果候选新闻与最近几天已写过的主题高度相似，除非有新的关键数据、政策动作、监管升级或产业变化，否则必须跳过，改选其他领域新闻。
 - 坚决过滤：娱乐八卦、单纯社会治安事件、没有数据或产业含义的企业公关稿。
 
 {OUTPUT_RULES}
@@ -243,7 +244,7 @@ def get_report_profile(run_context: dict[str, Any]) -> dict[str, Any]:
         "filename_prefix": "evening",
         "rss_sources": EVENING_RSS_SOURCES,
         "system_prompt": EVENING_SYSTEM_PROMPT,
-        "required_item_count": None,
+        "required_item_count": 5,
     }
 
 
@@ -633,6 +634,8 @@ def format_news_for_ai(
         for index, headline in enumerate(recent_headlines, start=1):
             lines.append(f"{index}. {headline}")
 
+        lines.append("")
+        lines.append("注意：不要把同一个事件、同一政策、同一机构动作、同一行业口径拆成多条不同标题。")
         lines.append("")
 
     for index, item in enumerate(news_data, start=1):
