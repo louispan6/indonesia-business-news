@@ -16,6 +16,10 @@ from openai import APIStatusError, OpenAI
 
 
 BEIJING_TZ = timezone(timedelta(hours=8), name="UTC+08:00")
+WECHAT_QR_IMAGE_URL = (
+    "https://louispan6.github.io/indonesia-business-news/"
+    "assets/images/wechat-qrcode.jpg"
+)
 
 
 OUTPUT_RULES = """
@@ -793,9 +797,18 @@ def save_to_markdown(
         )
     source_audit_lines.extend(["-->", ""])
     source_audit = "\n".join(source_audit_lines)
+    follow_section = "\n".join(
+        [
+            "### 关注公众号",
+            "",
+            "关注公众号，持续接收印尼市场、政策监管与出海商业情报。",
+            "",
+            f"![扫码关注公众号]({WECHAT_QR_IMAGE_URL})",
+        ]
+    )
 
     output_path.write_text(
-        front_matter + content.strip() + "\n\n" + source_audit + "\n",
+        front_matter + content.strip() + "\n\n" + follow_section + "\n\n" + source_audit + "\n",
         encoding="utf-8",
     )
     return output_path
