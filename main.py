@@ -2,6 +2,7 @@ import argparse
 import html
 import os
 import re
+import subprocess
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
@@ -20,6 +21,13 @@ WECHAT_QR_IMAGE_URL = (
     "https://louispan6.github.io/indonesia-business-news/"
     "assets/images/wechat-qrcode.jpg"
 )
+
+
+def env_flag(name: str, default: bool = False) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 OUTPUT_RULES = """
@@ -847,16 +855,98 @@ def save_raw_news_to_markdown(
     return output_path
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="抓取印尼商业新闻，调用 AI 筛选翻译，并保存为 Markdown 简报。"
+def push_to_github(output_path: Path) -> dict[str, Any]:
+    if not env_flag("GITHUB_PUSH_ENABLED"):
+        return {"enabled": False, "status": "skipped"}
+
+    github_token = os.getenv("GITHUB_TOKEN")
+    github_username = os.getenv("GITHUB_USERNAME")
+    github_repo = os.getenv("GITHUB_REPO")
+    missing_envs = [
+        name
+        for name, value in {
+            "GITHUB_TOKEN": github_token,
+            "GITHUB_USERNAME": github_username,
+            "GITHUB_REPO": github_repo,
+        }.items()
+        if not value
+    ]
+    if missing_envs:
+        raise RuntimeError(
+            "已开启 GITHUB_PUSH_ENABLED，但缺少环境变量："
+            + ", ".join(missing_envs)
+        )
+
+    branch = os.getenv("GITHUB_BRANCH", "main")
+    remote_url = f"https://{github_token}@github.com/{github_username}/{github_repo}.git"
+    commit_message = os.getenv(
+        "GITHUB_COMMIT_MESSAGE",
+        f"chore: publish Indonesia brief {output_path.name}",
     )
-    parser.add_argument(
-        "--fetch-only",
-        action="store_true",
-        help="只抓取 RSS 新闻并打印结果，不调用 AI。",
-    )
-    args = parser.parse_args()
+
+    commands = [
+        ["git", "config", "--global", "user.name", os.getenv("GIT_AUTHOR_NAME", "OpenClaw Bot")],
+        [
+            "git",
+            "config",
+            "--global",
+            "user.email",
+            os.getenv("GIT_AUTHOR_EMAIL", "openclaw-bot@users.noreply.github.com"),
+        ],
+        ["git", "remote", "set-url", "origin", remote_url],
+        ["git", "add", str(output_path)],
+        ["git", "commit", "-m", commit_message],
+        ["git", "pull", "--rebase", "origin", branch],
+        ["git", "push", "origin", branch],
+    ]
+
+    for command in commands:
+        result = subprocess.run(command, text=True, capture_output=True, check=False)
+        if command[:2] == ["git", "commit"] and result.returncode != 0:
+            combined_output = f"{result.stdout}\n{result.stderr}".lower()
+            if "nothing to commit" in combined_output or "no changes added" in combined_output:
+                return {"enabled": True, "status": "no_changes"}
+
+        if result.returncode != 0:
+            safe_command = [
+                part.replace(github_token, "***") if github_token else part
+                for part in command
+            ]
+            safe_stdout = result.stdout.replace(github_token, "***")
+            safe_stderr = result.stderr.replace(github_token, "***")
+            raise RuntimeError(
+                f"GitHub 推送步骤失败：{' '.join(safe_command)}\n"
+                f"stdout: {safe_stdout}\nstderr: {safe_stderr}"
+            )
+
+    return {
+        "enabled": True,
+        "status": "pushed",
+        "branch": branch,
+        "repo": f"{github_username}/{github_repo}",
+    }
+
+
+def publish_to_wechat(output_path: Path) -> dict[str, Any]:
+    if not env_flag("WECHAT_PUBLISH_ENABLED"):
+        return {"enabled": False, "status": "skipped"}
+
+    try:
+        from wechat_publisher import publish_markdown_to_wechat
+    except ImportError as exc:
+        raise RuntimeError(
+            "已开启 WECHAT_PUBLISH_ENABLED，但没有找到 wechat_publisher.py "
+            "或 publish_markdown_to_wechat()。"
+        ) from exc
+
+    result = publish_markdown_to_wechat(output_path)
+    if isinstance(result, dict):
+        return {"enabled": True, **result}
+    return {"enabled": True, "status": "published", "result": result}
+
+
+def run_daily_job(fetch_only: bool = False) -> dict[str, Any]:
+    load_dotenv()
 
     run_context = get_run_context()
     report_profile = get_report_profile(run_context)
@@ -884,12 +974,20 @@ def main() -> None:
     if recent_headlines:
         print(f"🧹 已读取最近同类文章标题 {len(recent_headlines)} 条，用于降低重复选题。")
 
-    if args.fetch_only:
+    if fetch_only:
         print("\n以下为抓取结果预览：")
         for index, item in enumerate(news_data, start=1):
             print(f"{index}. [{item['source']}] {item['title']}")
             print(f"   {item['link']}")
-        return
+
+        return {
+            "status": "ok",
+            "mode": report_profile["kind"],
+            "label": report_profile["label"],
+            "date": run_context["current_bj_date"],
+            "fetched_count": len(news_data),
+            "fetch_only": True,
+        }
 
     try:
         content = process_news_with_ai(
@@ -903,10 +1001,47 @@ def main() -> None:
         raw_output_path = save_raw_news_to_markdown(news_data, run_context)
         print(f"❌ AI 处理失败：{exc}")
         print(f"📝 已先保存候选新闻原始列表：{raw_output_path}")
-        raise SystemExit(1) from exc
+        raise
 
     output_path = save_to_markdown(content, report_profile, run_context, news_data)
     print(f"✅ 简报已生成：{output_path}")
+
+    github_result = push_to_github(output_path)
+    if github_result.get("enabled"):
+        print(f"✅ GitHub 推送结果：{github_result['status']}")
+
+    wechat_result = publish_to_wechat(output_path)
+    if wechat_result.get("enabled"):
+        print(f"✅ 微信推送结果：{wechat_result.get('status', 'done')}")
+
+    return {
+        "status": "ok",
+        "mode": report_profile["kind"],
+        "label": report_profile["label"],
+        "date": run_context["current_bj_date"],
+        "generated_file": str(output_path),
+        "fetched_count": len(news_data),
+        "github": github_result,
+        "wechat": wechat_result,
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="抓取印尼商业新闻，调用 AI 筛选翻译，并保存为 Markdown 简报。"
+    )
+    parser.add_argument(
+        "--fetch-only",
+        action="store_true",
+        help="只抓取 RSS 新闻并打印结果，不调用 AI。",
+    )
+    args = parser.parse_args()
+
+    try:
+        run_daily_job(fetch_only=args.fetch_only)
+    except RuntimeError as exc:
+        print(f"❌ 任务执行失败：{exc}")
+        raise SystemExit(1) from exc
 
 
 if __name__ == "__main__":
