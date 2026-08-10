@@ -724,6 +724,7 @@ def process_news_with_ai(
     api_key = os.getenv("DEEPSEEK_API_KEY")
     base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     model = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
+    max_tokens = int(os.getenv("DEEPSEEK_MAX_TOKENS", "16000"))
 
     if not api_key:
         raise RuntimeError("未检测到 DEEPSEEK_API_KEY，请先在 .env 文件中配置。")
@@ -736,12 +737,15 @@ def process_news_with_ai(
         required_item_count,
     )
 
-    print(f"🧠 正在交由 DeepSeek AI 分析筛选，模型：{model} ...")
+    print(
+        f"🧠 正在交由 DeepSeek AI 分析筛选，模型：{model}，"
+        f"最大输出：{max_tokens} tokens ..."
+    )
     try:
         response = client.chat.completions.create(
             model=model,
             temperature=0.3,
-            max_tokens=6000,
+            max_tokens=max_tokens,
             messages=[
                 {"role": "system", "content": final_system_prompt},
                 {"role": "user", "content": news_text},
@@ -756,9 +760,25 @@ def process_news_with_ai(
             f"DeepSeek API 调用失败：HTTP {exc.status_code}，{exc.message}"
         ) from exc
 
-    content = response.choices[0].message.content
+    choice = response.choices[0]
+    content = choice.message.content
+    usage = response.usage
+    completion_tokens = getattr(usage, "completion_tokens", None)
+    completion_details = getattr(usage, "completion_tokens_details", None)
+    reasoning_tokens = getattr(completion_details, "reasoning_tokens", None)
+    print(
+        "📊 DeepSeek 响应："
+        f"finish_reason={choice.finish_reason}, "
+        f"completion_tokens={completion_tokens}, "
+        f"reasoning_tokens={reasoning_tokens}"
+    )
     if not content:
-        raise RuntimeError("AI 返回内容为空。")
+        raise RuntimeError(
+            "AI 返回内容为空："
+            f"finish_reason={choice.finish_reason}, "
+            f"completion_tokens={completion_tokens}, "
+            f"reasoning_tokens={reasoning_tokens}。"
+        )
 
     return clean_ai_content(content)
 
