@@ -724,7 +724,8 @@ def process_news_with_ai(
     api_key = os.getenv("DEEPSEEK_API_KEY")
     base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     model = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
-    max_tokens = int(os.getenv("DEEPSEEK_MAX_TOKENS", "16000"))
+    # DeepSeek V4 supports up to 384K output tokens, including thinking tokens.
+    max_tokens = int(os.getenv("DEEPSEEK_MAX_TOKENS", "384000"))
 
     if not api_key:
         raise RuntimeError("未检测到 DEEPSEEK_API_KEY，请先在 .env 文件中配置。")
@@ -739,7 +740,7 @@ def process_news_with_ai(
 
     print(
         f"🧠 正在交由 DeepSeek AI 分析筛选，模型：{model}，"
-        f"最大输出：{max_tokens} tokens ..."
+        f"最大输出：{max_tokens} tokens（模型上限） ..."
     )
     try:
         response = client.chat.completions.create(
